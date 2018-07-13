@@ -25,7 +25,8 @@ def _spherical_kmeans_single_lloyd(X, n_clusters, max_iter=300,
                                    init='k-means++', verbose=False,
                                    x_squared_norms=None,
                                    random_state=None, tol=1e-4,
-                                   precompute_distances=True):
+                                   precompute_distances=True,
+                                   medoid_mode=False):
     '''
     Modified from sklearn.cluster.k_means_.k_means_single_lloyd.
     '''
@@ -66,8 +67,21 @@ def _spherical_kmeans_single_lloyd(X, n_clusters, max_iter=300,
         # l2-normalize centers (this is the main contibution here)
         centers = normalize(centers)
 
+        if medoid_mode:
+            # compute center-sample distances and assign new clusters to closest samples
+            center_sample_distances = np.dot(centers, X.T)
+            center_closest_sample_idxs = np.argmax(center_sample_distances, axis=1)
+            num_new_unique_centers = len(set(center_closest_sample_idxs.tolist()))
+
+            centers = X[center_closest_sample_idxs, :]
+
+
         if verbose:
-            print("Iteration %2d, inertia %.3f" % (i, inertia))
+            if medoid_mode:
+                print("Iteration %2d, inertia %.3f number of unique centers %3d" % (i, inertia, num_new_unique_centers))
+            else:
+                print("Iteration %2d, inertia %.3f" % (i, inertia))
+
 
         if best_inertia is None or inertia < best_inertia:
             best_labels = labels.copy()
@@ -96,7 +110,7 @@ def _spherical_kmeans_single_lloyd(X, n_clusters, max_iter=300,
 def spherical_k_means(X, n_clusters, init='k-means++', n_init=10,
                       max_iter=300, verbose=False, tol=1e-4, random_state=None,
                       copy_x=True, n_jobs=1, algorithm="auto",
-                      return_n_iter=False):
+                      return_n_iter=False, medoid_mode=False):
     """Modified from sklearn.cluster.k_means_.k_means.
     """
     if n_init <= 0:
@@ -134,7 +148,7 @@ def spherical_k_means(X, n_clusters, init='k-means++', n_init=10,
             labels, inertia, centers, n_iter_ = _spherical_kmeans_single_lloyd(
                 X, n_clusters, max_iter=max_iter, init=init, verbose=verbose,
                 tol=tol, x_squared_norms=x_squared_norms,
-                random_state=random_state)
+                random_state=random_state, medoid_mode=medoid_mode)
 
             # determine if these results are the best so far
             if best_inertia is None or inertia < best_inertia:
@@ -153,7 +167,8 @@ def spherical_k_means(X, n_clusters, init='k-means++', n_init=10,
                 verbose=verbose, tol=tol,
                 x_squared_norms=x_squared_norms,
                 # Change seed to ensure variety
-                random_state=seed
+                random_state=seed,
+                medoid_mode=medoid_mode
             )
             for seed in seeds)
 
@@ -246,7 +261,8 @@ class SphericalKMeans(KMeans):
     """
     def __init__(self, n_clusters=8, init='k-means++', n_init=10,
                  max_iter=300, tol=1e-4, n_jobs=1,
-                 verbose=0, random_state=None, copy_x=True, normalize=True):
+                 verbose=0, random_state=None, copy_x=True, normalize=True,
+                 medoid_mode=False):
         self.n_clusters = n_clusters
         self.init = init
         self.max_iter = max_iter
@@ -257,6 +273,7 @@ class SphericalKMeans(KMeans):
         self.copy_x = copy_x
         self.n_jobs = n_jobs
         self.normalize = normalize
+        self.medoid_mode = medoid_mode
 
     def fit(self, X, y=None):
         """Compute k-means clustering.
@@ -281,7 +298,8 @@ class SphericalKMeans(KMeans):
                 verbose=self.verbose,
                 tol=self.tol, random_state=random_state, copy_x=self.copy_x,
                 n_jobs=self.n_jobs,
-                return_n_iter=True
+                return_n_iter=True,
+                medoid_mode=self.medoid_mode
             )
 
         return self
